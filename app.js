@@ -16,7 +16,7 @@ const paths = {
 };
 let api, db, role, sender, userId, records = [], opened = false, alertTimer, photoUrls = new Map();
 let anchoredSection, revealObserver;
-let loginReady = false, loginUnavailable = false;
+let loginReady = false, loginUnavailable = false, loginIdentity;
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const dates = new Intl.DateTimeFormat("en-GB", { day:"numeric", month:"long", year:"numeric" });
 const months = new Intl.DateTimeFormat("en-GB", { month:"long", year:"numeric" });
@@ -276,13 +276,22 @@ function loginScreen() {
     action("preview","Open the preview","","primary") + '</div></section>';
   if (loginUnavailable) return welcome + '<div class="panel stack"><p>We couldn’t connect to the album. Try again in a moment.</p>' +
     action("retry-login","Try again","","primary") + '</div></section>';
-  return welcome + '<form id="login" class="panel stack"><label for="album-email">Email or nickname</label>' +
-    '<input id="album-email" name="email" autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" required>' +
-    '<label for="album-password">Password</label><div class="password-field">' +
-    '<input id="album-password" name="password" type="password" autocomplete="current-password" required>' +
-    '<button type="button" class="plain small-button" data-password-visibility aria-label="Show password" aria-controls="album-password">Show</button></div>' +
+  const email = loginIdentity?.email;
+  const isSondos = email === "sondos@album.example";
+  const fields = email
+    ? '<input type="hidden" name="email" value="' + esc(email) + '" autocomplete="username">' +
+      '<div class="login-greeting"><h2>' + (isSondos ? 'Hi, Sondos ♡' : 'You’re not important.') + '</h2>' +
+      (isSondos ? '' : '<p>Just kidding.</p>') + '</div><label for="album-password">Password</label>' +
+      '<div class="password-field"><input id="album-password" name="password" type="password" autocomplete="current-password" required>' +
+      '<button type="button" class="plain small-button" data-password-visibility aria-label="Show password" aria-controls="album-password">Show</button></div>'
+    : '<label for="album-email">Email or nickname</label><input id="album-email" name="email" value="' + esc(loginIdentity?.input || "") +
+      '" autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" required>';
+  const submit = email ? "Open our album" : "Continue";
+  return welcome + '<form id="login" class="panel stack">' + fields +
     '<button type="submit" class="primary"' + (loginReady ? '' : ' disabled') + '>' +
-    (loginReady ? 'Open our album' : 'Connecting…') + '</button><p class="form-note" role="status"></p></form></section>';
+    (loginReady ? submit : 'Connecting…') + '</button>' +
+    (email ? '<button type="button" class="plain small-button login-back" data-login-back>Use another email</button>' : '') +
+    '<p class="form-note" role="status"></p></form></section>';
 }
 
 function render() {
@@ -436,6 +445,7 @@ function clearSession() {
   opened = false;
   if (!cloud) sessionStorage.removeItem("album-preview-open");
   role = sender = userId = null;
+  loginIdentity = null;
   if (dialog.open) dialog.close();
   render();
 }
@@ -451,6 +461,12 @@ document.addEventListener("click", async event => {
   if (!button) return;
   const data = button.dataset;
   try {
+    if ("loginBack" in data) {
+      loginIdentity = {input:loginIdentity?.input};
+      render();
+      document.getElementById("album-email").focus();
+      return;
+    }
     if ("passwordVisibility" in data) {
       const password = document.getElementById("album-password");
       const showing = password.type === "password";
@@ -525,16 +541,25 @@ document.addEventListener("submit", async event => {
   button.disabled = true;
   note.textContent = "";
   const buttonLabel = button.textContent;
-  button.textContent = form.id === "login" ? "Opening…" : "Saving…";
+  const back = form.querySelector("[data-login-back]");
+  if (back) back.disabled = true;
+  button.textContent = form.id === "login" ? (loginIdentity?.email ? "Opening…" : buttonLabel) : "Saving…";
   const fields = new FormData(form);
   const value = key => fields.get(key)?.trim() || "";
   try {
     if (form.id === "login") {
       if (!loginReady) return;
-      const login = value("email").toLowerCase();
-      const email = login === "darling" ? "sondos@album.example" : login;
-      if (!email.includes("@")) throw new Error("Enter your album email or nickname.");
-      const result = await api.auth.signInWithPassword({email,password:fields.get("password")});
+      if (!loginIdentity?.email) {
+        const input = value("email");
+        const login = input.toLowerCase();
+        const email = login === "darling" ? "sondos@album.example" : login;
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("Enter your album email or nickname.");
+        loginIdentity = {input,email};
+        render();
+        document.getElementById("album-password").focus();
+        return;
+      }
+      const result = await api.auth.signInWithPassword({email:loginIdentity.email,password:fields.get("password")});
       if (result.error?.code === "invalid_credentials") throw new Error("That email or password didn’t match. Try again.");
       checked(result);
       await startSession();
@@ -573,6 +598,7 @@ document.addEventListener("submit", async event => {
   } finally {
     button.textContent = buttonLabel;
     button.disabled = false;
+    if (back) back.disabled = false;
   }
 });
 window.addEventListener("hashchange", () => {
@@ -613,7 +639,7 @@ async function init() {
       }
     } else {
       const button = document.querySelector('#login button[type="submit"]');
-      button.textContent = "Open our album";
+      button.textContent = "Continue";
       button.disabled = false;
     }
   } catch (error) {

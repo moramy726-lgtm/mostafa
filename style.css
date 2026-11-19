@@ -105,3 +105,8 @@ dialog::backdrop{animation:fade-in .24s ease both}
 .login form button[type=submit]{margin-top:7px}
 .login .form-note:empty{display:none}
 .login .form-note{font-size:.9rem}
+
+.login-greeting h2{font:normal clamp(1.5rem,6vw,2rem)/1.2 Georgia,serif;color:var(--wine)}
+.login-greeting p{margin-top:4px;color:var(--muted)}
+.login-greeting{margin-bottom:5px}
+.login .login-back{justify-self:start;background:none;text-decoration:underline;text-underline-offset:3px;padding-inline:0}
