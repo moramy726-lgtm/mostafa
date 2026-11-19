@@ -93,3 +93,15 @@ dialog::backdrop{animation:fade-in .24s ease both}
   .hero.has-image .hero-copy{padding:22px 20px 24px}
   .hero.has-image h1{font-size:clamp(2.1rem,8.8vw,3.2rem)}
 }
+
+.login{max-width:440px;gap:0}
+.login .welcome{margin-bottom:0;border-radius:20px 20px 0 0;border-bottom:0}
+.login form,.login .panel{padding:clamp(19px,5.5vw,28px);border-radius:0 0 20px 20px}
+.login form{gap:10px}
+.login form label{gap:0}
+.login form input{min-width:0}
+.password-field{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:stretch}
+.password-field button{min-width:68px}
+.login form button[type=submit]{margin-top:7px}
+.login .form-note:empty{display:none}
+.login .form-note{font-size:.9rem}

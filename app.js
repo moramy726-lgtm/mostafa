@@ -16,6 +16,7 @@ const paths = {
 };
 let api, db, role, sender, userId, records = [], opened = false, alertTimer, photoUrls = new Map();
 let anchoredSection, revealObserver;
+let loginReady = false, loginUnavailable = false;
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const dates = new Intl.DateTimeFormat("en-GB", { day:"numeric", month:"long", year:"numeric" });
 const months = new Intl.DateTimeFormat("en-GB", { month:"long", year:"numeric" });
@@ -268,6 +269,22 @@ function dashboard() {
       action("new","Add " + kind,kind,"primary") + '</div>' +
       (ofKind(kind).length ? '<div class="list">' + ofKind(kind).map(item => row(item,false,true)).join("") + '</div>' : empty("Nothing added yet.")) + '</section>').join("");
 }
+function loginScreen() {
+  const welcome = '<section class="login stack"><div class="welcome"><h1>For you, Sondos.</h1>' +
+    '<p>A little place for our photos, our dates, and the things I want to tell you.</p><span class="signature">Mostafa</span></div>';
+  if (!cloud) return welcome + '<div class="panel stack"><p class="muted">This is a local preview. Changes stay in this browser.</p>' +
+    action("preview","Open the preview","","primary") + '</div></section>';
+  if (loginUnavailable) return welcome + '<div class="panel stack"><p>We couldn’t connect to the album. Try again in a moment.</p>' +
+    action("retry-login","Try again","","primary") + '</div></section>';
+  return welcome + '<form id="login" class="panel stack"><label for="album-email">Email or nickname</label>' +
+    '<input id="album-email" name="email" autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" required>' +
+    '<label for="album-password">Password</label><div class="password-field">' +
+    '<input id="album-password" name="password" type="password" autocomplete="current-password" required>' +
+    '<button type="button" class="plain small-button" data-password-visibility aria-label="Show password" aria-controls="album-password">Show</button></div>' +
+    '<button type="submit" class="primary"' + (loginReady ? '' : ' disabled') + '>' +
+    (loginReady ? 'Open our album' : 'Connecting…') + '</button><p class="form-note" role="status"></p></form></section>';
+}
+
 function render() {
   const account = document.querySelector("#account");
   main.removeAttribute("aria-busy");
@@ -275,9 +292,7 @@ function render() {
   if (!opened) {
     tabs.hidden = true;
     account.innerHTML = "";
-    main.innerHTML = '<section class="login stack"><div class="welcome"><h1>For you, Sondos.</h1><p>A few of my favorite memories with you.</p><span class="signature">Mostafa</span></div>' +
-      (cloud ? '<form id="login" class="panel stack"><label>Email<input name="email" type="email" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">Open our album</button><p class="form-note" role="status"></p></form>' :
-      '<div class="panel stack"><p class="muted">This is a local preview. Changes stay in this browser.</p>' + action("preview","Open the preview","","primary") + '</div>') + '</section>';
+    main.innerHTML = loginScreen();
     return;
   }
   const managing = dashboardOpen();
@@ -436,13 +451,27 @@ document.addEventListener("click", async event => {
   if (!button) return;
   const data = button.dataset;
   try {
+    if ("passwordVisibility" in data) {
+      const password = document.getElementById("album-password");
+      const showing = password.type === "password";
+      password.type = showing ? "text" : "password";
+      button.textContent = showing ? "Hide" : "Show";
+      button.setAttribute("aria-label", showing ? "Hide password" : "Show password");
+      return;
+    }
+    if ("retryLogin" in data) {
+      location.reload();
+      return;
+    }
     if ("preview" in data && !cloud) {
       button.disabled = true;
       await startSession();
     }
     if ("logout" in data) {
+      button.disabled = true;
       if (cloud) checked(await api.auth.signOut({scope:"local"}));
-      clearSession();
+      if (opened) clearSession();
+      return;
     }
     if ("close" in data && dialog.open) dialog.close();
     if ("day" in data) {
@@ -492,14 +521,22 @@ document.addEventListener("submit", async event => {
   event.preventDefault();
   const button = form.querySelector('button:not([type="button"])');
   const note = form.querySelector(".form-note");
+  if (button.disabled) return;
   button.disabled = true;
   note.textContent = "";
+  const buttonLabel = button.textContent;
+  button.textContent = form.id === "login" ? "Opening…" : "Saving…";
   const fields = new FormData(form);
   const value = key => fields.get(key)?.trim() || "";
   try {
     if (form.id === "login") {
-      if (!api) throw new Error("Supabase could not connect. Check the project settings.");
-      checked(await api.auth.signInWithPassword({email:value("email"),password:fields.get("password")}));
+      if (!loginReady) return;
+      const login = value("email").toLowerCase();
+      const email = login === "darling" ? "sondos@album.example" : login;
+      if (!email.includes("@")) throw new Error("Enter your album email or nickname.");
+      const result = await api.auth.signInWithPassword({email,password:fields.get("password")});
+      if (result.error?.code === "invalid_credentials") throw new Error("That email or password didn’t match. Try again.");
+      checked(result);
       await startSession();
       return;
     }
@@ -533,7 +570,10 @@ document.addEventListener("submit", async event => {
   } catch (error) {
     if (form.isConnected) note.textContent = error.message;
     else notify(error.message);
-  } finally { button.disabled = false; }
+  } finally {
+    button.textContent = buttonLabel;
+    button.disabled = false;
+  }
 });
 window.addEventListener("hashchange", () => {
   if (!opened) return;
@@ -563,7 +603,26 @@ async function init() {
     });
     api = window.supabase.createClient(url.href,config.publishableKey);
     api.auth.onAuthStateChange(event => { if (event === "SIGNED_OUT") clearSession(); });
-    if (checked(await api.auth.getSession()).session) await startSession();
-  } catch (error) { notify(error.message); }
+    const session = checked(await api.auth.getSession()).session;
+    loginReady = true;
+    if (session) {
+      try { await startSession(); }
+      catch (error) {
+        if (!opened) render();
+        notify(error.message);
+      }
+    } else {
+      const button = document.querySelector('#login button[type="submit"]');
+      button.textContent = "Open our album";
+      button.disabled = false;
+    }
+  } catch (error) {
+    if (cloud) {
+      loginUnavailable = true;
+      render();
+    } else {
+      notify(error.message);
+    }
+  }
 }
 init();
