@@ -269,6 +269,17 @@ function dashboard() {
       action("new","Add " + kind,kind,"primary") + '</div>' +
       (ofKind(kind).length ? '<div class="list">' + ofKind(kind).map(item => row(item,false,true)).join("") + '</div>' : empty("Nothing added yet.")) + '</section>').join("");
 }
+function resolveAlbumEmail(input) {
+  const alias = /^yours-([a-z0-9_-]{16})$/i.exec(input);
+  if (alias) {
+    const bytes = atob(alias[1].replace(/-/g,"+").replace(/_/g,"/"));
+    const code = Array.from(bytes, byte => byte.charCodeAt(0).toString(16).padStart(2,"0")).join("");
+    return "mostafa-" + code + "@album.example";
+  }
+  const email = input.toLowerCase();
+  return email === "darling" ? "sondos@album.example" : email;
+}
+
 function loginScreen() {
   const welcome = '<section class="login stack"><div class="welcome"><h1>For you, Sondos.</h1>' +
     '<p>A little place for our photos, our dates, and the things I want to tell you.</p><span class="signature">Mostafa</span></div>';
@@ -551,8 +562,7 @@ document.addEventListener("submit", async event => {
       if (!loginReady) return;
       if (!loginIdentity?.email) {
         const input = value("email");
-        const login = input.toLowerCase();
-        const email = login === "darling" ? "sondos@album.example" : login;
+        const email = resolveAlbumEmail(input);
         if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("Enter your album email or nickname.");
         loginIdentity = {input,email};
         render();
