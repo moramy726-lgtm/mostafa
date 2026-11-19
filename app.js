@@ -14,7 +14,7 @@ const paths = {
   calendar:"M3 6h18v15H3z M7 3v6 M17 3v6 M3 11h18 M8 16h2 M14 16h2",
   letter:"M3 5h18v14H3z M3 6l9 7 9-7"
 };
-let api, db, role, records = [], opened = false, alertTimer, photoUrls = new Map();
+let api, db, role, sender, userId, records = [], opened = false, alertTimer, photoUrls = new Map();
 let anchoredSection, revealObserver;
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const dates = new Intl.DateTimeFormat("en-GB", { day:"numeric", month:"long", year:"numeric" });
@@ -34,6 +34,10 @@ function esc(value = "") {
 }
 const find = id => records.find(item => item.id === id);
 const dashboardOpen = () => role === "editor" && location.hash === "#manage";
+const canEdit = item => Boolean(item && (!cloud || (
+  item.kind === "letter" ? (item.letter_from || "mostafa") === sender :
+  sender === "mostafa" || item.created_by === userId
+)));
 const ofKind = kind => records.filter(item => item.kind === kind).sort((a,b) =>
   kind === "letter"
     ? (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0)
@@ -132,7 +136,9 @@ async function save(item, file) {
     checked(await api.storage.from("album-photos").upload(item.storage_path,file,{contentType:file.type}));
   }
   try {
-    checked(await api.from("album_entries").upsert(item));
+    const entries = api.from("album_entries");
+    const query = find(item.id) ? entries.update(item).eq("id",item.id) : entries.insert(item);
+    checked(await query.select("id").single());
   } catch (error) {
     if (file) await api.storage.from("album-photos").remove([item.storage_path]);
     throw error;
@@ -140,13 +146,12 @@ async function save(item, file) {
 }
 async function remove(item) {
   if (!cloud) return localOperation("readwrite", store => {
-    for (const photo of records.filter(photo => photo.parent_id === item.id)) store.delete(photo.id);
+    for (const photo of records.filter(photo => photo.parent_id === item.id)) store.put({...photo,parent_id:null});
     return store.delete(item.id);
   });
-  const photoPaths = records.filter(photo => photo.id === item.id || photo.parent_id === item.id).map(photo => photo.storage_path).filter(Boolean);
-  checked(await api.from("album_entries").delete().eq("id",item.id));
-  if (photoPaths.length) {
-    const result = await api.storage.from("album-photos").remove(photoPaths);
+  checked(await api.from("album_entries").delete().eq("id",item.id).select("id").single());
+  if (item.storage_path) {
+    const result = await api.storage.from("album-photos").remove([item.storage_path]);
     if (result.error) return "Removed from the album. Storage cleanup failed.";
   }
 }
@@ -169,7 +174,7 @@ function row(item, detail = false, manage = false) {
     (detail && item.body ? '<p class="preserve">' + esc(item.body) + '</p>' : '') +
     (photoCount ? '<p><small>' + photoCount + (photoCount === 1 ? ' photo' : ' photos') + '</small></p>' : '') +
     '</div><div class="actions">' +
-    (manage ? action("edit","Edit",item.id,"plain small-button") : '') +
+    (manage && canEdit(item) ? action("edit","Edit",item.id,"plain small-button") : '') +
     (viewing ? action("view","Open",item.id,"plain small-button") : item.kind === "photo" ? action("view-photo","Open",item.id,"plain small-button") : '') +
     '</div></article>';
 }
@@ -357,7 +362,7 @@ function entryForm(kind, item, parentId) {
   showDialog((item ? "Edit " : "Add ") + kind,'<form id="entry" class="stack" data-kind="' + kind + '" data-id="' + esc(item?.id) + '">' +
     '<label>Title' + (photo ? ' (optional)' : '') + '<input name="title" maxlength="120" value="' + esc(title) + '"' + (photo ? "" : " required") + '></label>' +
     (!letter ? '<label>Date' + (photo ? " (optional)" : "") + '<input name="date" type="date" value="' + esc(item?.date ?? (photo ? find(linked)?.date || "" : event ? selected : today())) + '"' + (photo ? "" : " required") + '></label>' : '') +
-    (letter ? '<label>From<select name="letter_from"><option value="mostafa">Mostafa to Sondos</option>' +
+    (letter && !cloud ? '<label>From<select name="letter_from"><option value="mostafa">Mostafa to Sondos</option>' +
       '<option value="sondos"' + (item?.letter_from === "sondos" ? ' selected' : '') + '>Sondos to Mostafa</option></select></label>' : '') +
     (event ? '<label class="check"><input name="annual" type="checkbox"' + (item?.annual ? " checked" : "") + '> Repeat every year</label>' : '') +
     (!photo ? '<label>' + (letter ? "Letter" : "Your story (optional)") + '<textarea name="body" maxlength="10000"' + (letter ? " required" : "") + '>' + esc(item?.body) + '</textarea></label>' :
@@ -370,7 +375,7 @@ function itemDetails(item, date = item.date) {
   const attached = ofKind("photo").filter(photo => photo.parent_id === item.id);
   return '<div class="stack">' + formatDate(date) + (item.annual ? '<small>Repeats every year</small>' : '') +
     (item.body ? '<p class="preserve">' + esc(item.body) + '</p>' : '') + (attached.length ? photos(attached) : '') +
-    (dashboardOpen() ? '<div class="actions">' + action("attach","Add a photo",item.id,"primary") + action("edit","Edit",item.id) + '</div>' : '') + '</div>';
+    (dashboardOpen() && canEdit(item) ? '<div class="actions">' + action("attach","Add a photo",item.id,"primary") + action("edit","Edit",item.id) + '</div>' : '') + '</div>';
 }
 function viewItem(item) {
   showDialog(item.title,itemDetails(item));
@@ -389,8 +394,13 @@ function viewDay(day) {
 
 async function startSession() {
   if (cloud) {
-    role = checked(await api.rpc("album_role"));
-    if (!["editor","viewer"].includes(role)) {
+    const [roleResult, senderResult, userResult] = await Promise.all([
+      api.rpc("album_role"), api.rpc("album_sender"), api.auth.getUser()
+    ]);
+    role = checked(roleResult);
+    sender = checked(senderResult);
+    userId = checked(userResult).user?.id;
+    if (!["editor","viewer"].includes(role) || (role === "editor" && !["mostafa","sondos"].includes(sender))) {
       await api.auth.signOut({scope:"local"});
       throw new Error("This account doesn’t have access to the album.");
     }
@@ -410,7 +420,7 @@ function clearSession() {
   records = [];
   opened = false;
   if (!cloud) sessionStorage.removeItem("album-preview-open");
-  role = null;
+  role = sender = userId = null;
   if (dialog.open) dialog.close();
   render();
 }
@@ -457,12 +467,12 @@ document.addEventListener("click", async event => {
     }
     if (!dashboardOpen()) return;
     if ("new" in data) entryForm(data.new);
-    if ("edit" in data && find(data.edit)) entryForm(find(data.edit).kind,find(data.edit));
-    if ("attach" in data) entryForm("photo",null,data.attach);
-    if ("delete" in data && find(data.delete)) {
+    if ("edit" in data && canEdit(find(data.edit))) entryForm(find(data.edit).kind,find(data.edit));
+    if ("attach" in data && canEdit(find(data.attach))) entryForm("photo",null,data.attach);
+    if ("delete" in data && canEdit(find(data.delete))) {
       const item = find(data.delete);
       const attached = ofKind("photo").some(photo => photo.parent_id === item.id);
-      if (!confirm(attached ? "Delete this entry and its attached photos?" : "Delete this entry?")) return;
+      if (!confirm(attached ? "Delete this entry? Its photos will stay in the album." : "Delete this entry?")) return;
       button.disabled = true;
       const warning = await remove(item);
       dialog.close();
@@ -496,6 +506,7 @@ document.addEventListener("submit", async event => {
     if (!dashboardOpen()) return;
     const {kind,id} = form.dataset;
     const current = find(id);
+    if (id && !canEdit(current)) throw new Error("You can only change entries you’re allowed to edit.");
     const file = fields.get("file");
     if (file && (!["image/jpeg","image/png","image/webp","image/gif","image/avif"].includes(file.type) || file.size < 1 || file.size > 15 * 1024 * 1024)) {
       throw new Error("Choose a supported image up to 15 MB.");
@@ -508,9 +519,10 @@ document.addEventListener("submit", async event => {
       annual:fields.has("annual"), parent_id:value("parent_id") || null
     };
     if (kind === "letter") {
-      item.letter_from = value("letter_from") === "sondos" ? "sondos" : "mostafa";
+      item.letter_from = cloud ? sender : value("letter_from") === "sondos" ? "sondos" : "mostafa";
       if (!current) item.created_at = new Date().toISOString();
     }
+    if (cloud && !current) item.created_by = userId;
     await save(item,file);
     dialog.close();
     await refresh();
