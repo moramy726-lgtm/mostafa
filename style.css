@@ -110,3 +110,11 @@ dialog::backdrop{animation:fade-in .24s ease both}
 .login-greeting p{margin-top:4px;color:var(--muted)}
 .login-greeting{margin-bottom:5px}
 .login .login-back{justify-self:start;background:none;text-decoration:underline;text-underline-offset:3px;padding-inline:0}
+
+.album-song{margin-top:20px}
+.album-song-row{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.album-song-row h2{font-family:Georgia,serif;font-weight:normal;color:var(--wine)}
+.album-song-row button{flex-shrink:0}
+#album-song-player{margin-top:14px}
+#album-song-player iframe{width:100%;height:auto;aspect-ratio:16/9;min-height:200px;display:block;border:0;border-radius:12px;background:#241820}
+.song-source{display:inline-block;margin-top:8px;color:var(--wine);text-decoration:underline}
