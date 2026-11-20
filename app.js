@@ -432,17 +432,7 @@ function viewDay(day) {
   ).join("") + '</div>');
 }
 
-function setSongPlaying(playing) {
-  songDock.innerHTML = '<div class="song-dock-row">' +
-    (playing ? '<span>Valentine · Laufey</span>' : '') +
-    action("album-song",playing ? "Stop music" : "Play Valentine","","plain small-button") + '</div>' +
-    (playing ? '<iframe src="https://www.youtube-nocookie.com/embed/tyKu0uZS86Q?autoplay=1" title="Valentine by Laufey, official audio" ' +
-      'referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>' +
-      '<a class="song-source" href="https://www.youtube.com/watch?v=tyKu0uZS86Q" target="_blank" rel="noopener noreferrer">Open on YouTube</a>' : '');
-  songDock.classList.toggle("song-active",playing);
-}
-
-async function startSession({playMusic = false} = {}) {
+async function startSession() {
   if (cloud) {
     const [roleResult, senderResult, userResult] = await Promise.all([
       api.rpc("album_role"), api.rpc("album_sender"), api.auth.getUser()
@@ -464,7 +454,8 @@ async function startSession({playMusic = false} = {}) {
   render();
   goToSection();
   songDock.hidden = false;
-  setSongPlaying(playMusic && sender === 'sondos');
+  songDock.innerHTML = '<a class="plain small-button" href="https://www.youtube.com/watch?v=tyKu0uZS86Q" ' +
+    'aria-label="Listen to Valentine by Laufey on YouTube" target="_blank" rel="noopener noreferrer">♪ Valentine</a>';
 }
 function clearSession() {
   for (const url of photoUrls.values()) URL.revokeObjectURL(url);
@@ -491,10 +482,6 @@ document.addEventListener("click", async event => {
   if (!button) return;
   const data = button.dataset;
   try {
-    if ("albumSong" in data) {
-      if (opened) setSongPlaying(!songDock.querySelector("iframe"));
-      return;
-    }
     if ("loginBack" in data) {
       loginIdentity = {input:loginIdentity?.input};
       render();
@@ -595,7 +582,7 @@ document.addEventListener("submit", async event => {
       const result = await api.auth.signInWithPassword({email:loginIdentity.email,password:fields.get("password")});
       if (result.error?.code === "invalid_credentials") throw new Error("That email or password didn’t match. Try again.");
       checked(result);
-      await startSession({playMusic:true});
+      await startSession();
       return;
     }
     if (!dashboardOpen()) return;
