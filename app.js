@@ -1,6 +1,11 @@
 "use strict";
 
 const main = document.querySelector("#main");
+const songDock = document.createElement("aside");
+songDock.className = "album-song-dock";
+songDock.setAttribute("aria-label","Album music");
+songDock.hidden = true;
+document.body.append(songDock);
 const tabs = document.querySelector("#tabs");
 const dialog = document.querySelector("#dialog");
 const config = window.albumConfig || {};
@@ -213,10 +218,7 @@ function home() {
     '<a class="hero-link" href="#letter">Read my letter</a></div></section>' +
     '<section class="section"><div class="heading"><h2>Since we got together</h2></div><div class="counter">' +
     ["Days","Hours","Minutes","Seconds"].map((label,index) => '<div><b id="count-' + index + '">0</b><span>' + label + '</span></div>').join("") +
-    '</div></section><section class="panel album-song" aria-label="Album song"><div class="album-song-row">' +
-    '<div><h2>Valentine</h2><p class="muted">Laufey</p></div>' +
-    '<button type="button" class="plain" data-album-song aria-expanded="false" aria-controls="album-song-player">Play song</button></div>' +
-    '<div id="album-song-player" hidden></div></section>';
+    '</div></section>';
 }
 function tick() {
   const seconds = Math.max(0, Math.floor((Date.now() - start)/1000));
@@ -430,7 +432,17 @@ function viewDay(day) {
   ).join("") + '</div>');
 }
 
-async function startSession() {
+function setSongPlaying(playing) {
+  songDock.innerHTML = '<div class="song-dock-row">' +
+    (playing ? '<span>Valentine · Laufey</span>' : '') +
+    action("album-song",playing ? "Stop music" : "Play Valentine","","plain small-button") + '</div>' +
+    (playing ? '<iframe src="https://www.youtube-nocookie.com/embed/tyKu0uZS86Q?autoplay=1" title="Valentine by Laufey, official audio" ' +
+      'referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>' +
+      '<a class="song-source" href="https://www.youtube.com/watch?v=tyKu0uZS86Q" target="_blank" rel="noopener noreferrer">Open on YouTube</a>' : '');
+  songDock.classList.toggle("song-active",playing);
+}
+
+async function startSession({playMusic = false} = {}) {
   if (cloud) {
     const [roleResult, senderResult, userResult] = await Promise.all([
       api.rpc("album_role"), api.rpc("album_sender"), api.auth.getUser()
@@ -451,12 +463,16 @@ async function startSession() {
   if (!cloud) sessionStorage.setItem("album-preview-open","1");
   render();
   goToSection();
+  songDock.hidden = false;
+  setSongPlaying(playMusic && sender === 'sondos');
 }
 function clearSession() {
   for (const url of photoUrls.values()) URL.revokeObjectURL(url);
   photoUrls.clear();
   records = [];
   opened = false;
+  songDock.hidden = true;
+  songDock.replaceChildren();
   if (!cloud) sessionStorage.removeItem("album-preview-open");
   role = sender = userId = null;
   loginIdentity = null;
@@ -476,14 +492,7 @@ document.addEventListener("click", async event => {
   const data = button.dataset;
   try {
     if ("albumSong" in data) {
-      const player = document.getElementById("album-song-player");
-      player.hidden = !player.hidden;
-      button.setAttribute("aria-expanded",String(!player.hidden));
-      button.textContent = player.hidden ? "Play song" : "Close player";
-      player.innerHTML = player.hidden ? "" :
-        '<iframe src="https://www.youtube-nocookie.com/embed/tyKu0uZS86Q?autoplay=1" title="Valentine by Laufey, official audio" ' +
-        'referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>' +
-        '<a class="song-source" href="https://www.youtube.com/watch?v=tyKu0uZS86Q" target="_blank" rel="noopener noreferrer">Open on YouTube</a>';
+      if (opened) setSongPlaying(!songDock.querySelector("iframe"));
       return;
     }
     if ("loginBack" in data) {
@@ -586,7 +595,7 @@ document.addEventListener("submit", async event => {
       const result = await api.auth.signInWithPassword({email:loginIdentity.email,password:fields.get("password")});
       if (result.error?.code === "invalid_credentials") throw new Error("That email or password didn’t match. Try again.");
       checked(result);
-      await startSession();
+      await startSession({playMusic:true});
       return;
     }
     if (!dashboardOpen()) return;
