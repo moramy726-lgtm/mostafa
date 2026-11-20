@@ -112,4 +112,4 @@ dialog::backdrop{animation:fade-in .24s ease both}
 .login .login-back{justify-self:start;background:none;text-decoration:underline;text-underline-offset:3px;padding-inline:0}
 
 .album-song-dock{position:fixed;z-index:3;right:max(10px,env(safe-area-inset-right));bottom:calc(70px + env(safe-area-inset-bottom));width:max-content;max-width:calc(100vw - 20px)}
-.album-song-dock a{box-shadow:var(--soft-shadow)}
+.song-toggle{box-shadow:var(--soft-shadow);min-width:78px}

@@ -6,6 +6,56 @@ songDock.className = "album-song-dock";
 songDock.setAttribute("aria-label","Album music");
 songDock.hidden = true;
 document.body.append(songDock);
+const songAudio = document.createElement("audio");
+songAudio.preload = "none";
+const songButton = document.createElement("button");
+songButton.type = "button";
+songButton.className = "plain small-button song-toggle";
+songDock.append(songAudio,songButton);
+
+function syncSongButton() {
+  const label = songAudio.paused ? "Play Valentine" : "Pause Valentine";
+  songButton.textContent = songAudio.paused ? "♪ Play" : "❚❚ Pause";
+  songButton.setAttribute("aria-label",label);
+}
+
+for (const event of ["play","pause","ended"]) songAudio.addEventListener(event,syncSongButton);
+songAudio.addEventListener("error",() => {
+  if (songAudio.hasAttribute("src")) notify("Valentine couldn’t play on this device.");
+});
+songButton.addEventListener("click",() => {
+  if (!songAudio.paused) songAudio.pause();
+  else songAudio.play().catch(() => notify("Couldn’t play Valentine. Tap Play to try again."));
+});
+
+async function loadSong(autoplay) {
+  songButton.disabled = true;
+  syncSongButton();
+  songDock.hidden = false;
+  const account = userId;
+  try {
+    const blob = checked(await api.storage.from("album-music").download("valentine.mp4"));
+    if (!opened || userId !== account || songDock.hidden) return;
+    songAudio.src = URL.createObjectURL(blob);
+    songButton.disabled = false;
+    if (autoplay) await songAudio.play().catch(syncSongButton);
+  } catch {
+    if (!opened || userId !== account) return;
+    songDock.hidden = true;
+    notify("Valentine couldn’t load.");
+  }
+}
+
+function unloadSong() {
+  songDock.hidden = true;
+  songAudio.pause();
+  const src = songAudio.getAttribute("src");
+  if (src) {
+    songAudio.removeAttribute("src");
+    songAudio.load();
+    URL.revokeObjectURL(src);
+  }
+}
 const tabs = document.querySelector("#tabs");
 const dialog = document.querySelector("#dialog");
 const config = window.albumConfig || {};
@@ -432,7 +482,7 @@ function viewDay(day) {
   ).join("") + '</div>');
 }
 
-async function startSession() {
+async function startSession({autoplaySong = false} = {}) {
   if (cloud) {
     const [roleResult, senderResult, userResult] = await Promise.all([
       api.rpc("album_role"), api.rpc("album_sender"), api.auth.getUser()
@@ -453,17 +503,14 @@ async function startSession() {
   if (!cloud) sessionStorage.setItem("album-preview-open","1");
   render();
   goToSection();
-  songDock.hidden = false;
-  songDock.innerHTML = '<a class="plain small-button" href="https://www.youtube.com/watch?v=tyKu0uZS86Q" ' +
-    'aria-label="Listen to Valentine by Laufey on YouTube" target="_blank" rel="noopener noreferrer">♪ Valentine</a>';
+  if (cloud) void loadSong(autoplaySong && sender === "sondos");
 }
 function clearSession() {
   for (const url of photoUrls.values()) URL.revokeObjectURL(url);
   photoUrls.clear();
   records = [];
   opened = false;
-  songDock.hidden = true;
-  songDock.replaceChildren();
+  unloadSong();
   if (!cloud) sessionStorage.removeItem("album-preview-open");
   role = sender = userId = null;
   loginIdentity = null;
@@ -582,7 +629,7 @@ document.addEventListener("submit", async event => {
       const result = await api.auth.signInWithPassword({email:loginIdentity.email,password:fields.get("password")});
       if (result.error?.code === "invalid_credentials") throw new Error("That email or password didn’t match. Try again.");
       checked(result);
-      await startSession();
+      await startSession({autoplaySong:true});
       return;
     }
     if (!dashboardOpen()) return;
