@@ -94,8 +94,9 @@ const canEdit = item => Boolean(item && (!cloud || (
   item.kind === "letter" ? (item.letter_from || "mostafa") === sender :
   sender === "mostafa" || item.created_by === userId
 )));
-const ofKind = kind => records.filter(item => item.kind === kind).sort((a,b) =>
-  kind === "letter"
+const entryKind = item => item.kind === "photo" && item.id.startsWith("hero-") ? "cover" : item.kind;
+const ofKind = kind => records.filter(item => entryKind(item) === kind).sort((a,b) =>
+  kind === "letter" || kind === "cover"
     ? (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0)
     : (b.date || "").localeCompare(a.date || "")
 );
@@ -259,7 +260,8 @@ function memoryFeed() {
 }
 function home() {
   const gallery = ofKind("photo");
-  const cover = gallery.find(item => item.id === "preview-selfie" && photoUrls.has(item.id)) ||
+  const cover = ofKind("cover").find(item => photoUrls.has(item.id)) ||
+    gallery.find(item => item.id === "preview-selfie" && photoUrls.has(item.id)) ||
     gallery.find(item => photoUrls.has(item.id));
   return '<section class="hero' + (cover ? ' has-image' : '') + '">' +
     (cover ? '<img src="' + esc(photoUrls.get(cover.id)) + '" alt="">' : '') +
@@ -318,10 +320,10 @@ function letters() {
   }).join("");
 }
 function dashboard() {
-  const groups = [["photo","Photos"],["memory","Memories"],["event","Special dates"],["letter","Letters"]];
+  const groups = [["cover","Cover photo"],["photo","Photos"],["memory","Memories"],["event","Special dates"],["letter","Letters"]];
   return '<div class="heading"><h1>Dashboard</h1></div>' +
     groups.map(([kind,title]) => '<section class="section"><div class="heading"><h2>' +title+ '</h2>' +
-      action("new","Add " + kind,kind,"primary") + '</div>' +
+      action("new",kind === "cover" ? "Upload cover photo" : "Add " + kind,kind,"primary") + '</div>' +
       (ofKind(kind).length ? '<div class="list">' + ofKind(kind).map(item => row(item,false,true)).join("") + '</div>' : empty("Nothing added yet.")) + '</section>').join("");
 }
 function resolveAlbumEmail(input) {
@@ -444,18 +446,18 @@ function showDialog(title, content) {
   else dialog.querySelector("[data-close]").focus({preventScroll:true});
 }
 function entryForm(kind, item, parentId) {
-  const photo = kind === "photo", letter = kind === "letter";
+  const cover = kind === "cover", photo = kind === "photo" || cover, letter = kind === "letter";
   const event = kind === "event";
   const title = item?.title || "";
   const related = [...ofKind("memory"),...ofKind("event")];
   const linked = item?.parent_id || parentId;
-  showDialog((item ? "Edit " : "Add ") + kind,'<form id="entry" class="stack" data-kind="' + kind + '" data-id="' + esc(item?.id) + '">' +
+  showDialog((item ? "Edit " : "Add ") + (cover ? "cover photo" : kind),'<form id="entry" class="stack" data-kind="' + kind + '" data-id="' + esc(item?.id) + '">' +
     '<label>Title' + (photo ? ' (optional)' : '') + '<input name="title" maxlength="120" value="' + esc(title) + '"' + (photo ? "" : " required") + '></label>' +
-    (!letter ? '<label>Date' + (photo ? " (optional)" : "") + '<input name="date" type="date" value="' + esc(item?.date ?? (photo ? find(linked)?.date || "" : event ? selected : today())) + '"' + (photo ? "" : " required") + '></label>' : '') +
+    (!letter && !cover ? '<label>Date' + (photo ? " (optional)" : "") + '<input name="date" type="date" value="' + esc(item?.date ?? (photo ? find(linked)?.date || "" : event ? selected : today())) + '"' + (photo ? "" : " required") + '></label>' : '') +
     (letter && !cloud ? '<label>From<select name="letter_from"><option value="mostafa">Mostafa to Sondos</option>' +
       '<option value="sondos"' + (item?.letter_from === "sondos" ? ' selected' : '') + '>Sondos to Mostafa</option></select></label>' : '') +
     (event ? '<label class="check"><input name="annual" type="checkbox"' + (item?.annual ? " checked" : "") + '> Repeat every year</label>' : '') +
-    (!photo ? '<label>' + (letter ? "Letter" : "Your story (optional)") + '<textarea name="body" maxlength="10000"' + (letter ? " required" : "") + '>' + esc(item?.body) + '</textarea></label>' :
+    (!photo ? '<label>' + (letter ? "Letter" : "Your story (optional)") + '<textarea name="body" maxlength="10000"' + (letter ? " required" : "") + '>' + esc(item?.body) + '</textarea></label>' : cover ? '' :
      '<label>Attach to a memory or event<select name="parent_id"><option value="">General album</option>' + related.map(parent => '<option value="' + esc(parent.id) + '"' + (linked === parent.id ? " selected" : "") + '>' + esc(parent.title) + '</option>').join("") + '</select></label>') +
     (photo && !item ? '<label>Photo<input type="file" name="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" required></label><small>JPEG, PNG, WebP, GIF or AVIF · up to 15 MB each.</small>' : '') +
     '<div class="actions"><button class="primary">Save</button>' + (item ? action("delete","Delete",item.id) : '') +
@@ -482,7 +484,7 @@ function viewDay(day) {
   ).join("") + '</div>');
 }
 
-async function startSession({autoplaySong = false} = {}) {
+async function startSession() {
   if (cloud) {
     const [roleResult, senderResult, userResult] = await Promise.all([
       api.rpc("album_role"), api.rpc("album_sender"), api.auth.getUser()
@@ -503,7 +505,7 @@ async function startSession({autoplaySong = false} = {}) {
   if (!cloud) sessionStorage.setItem("album-preview-open","1");
   render();
   goToSection();
-  if (cloud) void loadSong(autoplaySong && sender === "sondos");
+  if (cloud) void loadSong(sender === "sondos");
 }
 function clearSession() {
   for (const url of photoUrls.values()) URL.revokeObjectURL(url);
@@ -580,7 +582,7 @@ document.addEventListener("click", async event => {
     }
     if (!dashboardOpen()) return;
     if ("new" in data) entryForm(data.new);
-    if ("edit" in data && canEdit(find(data.edit))) entryForm(find(data.edit).kind,find(data.edit));
+    if ("edit" in data && canEdit(find(data.edit))) entryForm(entryKind(find(data.edit)),find(data.edit));
     if ("attach" in data && canEdit(find(data.attach))) entryForm("photo",null,data.attach);
     if ("delete" in data && canEdit(find(data.delete))) {
       const item = find(data.delete);
@@ -629,11 +631,13 @@ document.addEventListener("submit", async event => {
       const result = await api.auth.signInWithPassword({email:loginIdentity.email,password:fields.get("password")});
       if (result.error?.code === "invalid_credentials") throw new Error("That email or password didn’t match. Try again.");
       checked(result);
-      await startSession({autoplaySong:true});
+      await startSession();
       return;
     }
     if (!dashboardOpen()) return;
-    const {kind,id} = form.dataset;
+    const {id} = form.dataset;
+    const cover = form.dataset.kind === "cover";
+    const kind = cover ? "photo" : form.dataset.kind;
     const current = find(id);
     if (id && !canEdit(current)) throw new Error("You can only change entries you’re allowed to edit.");
     const file = fields.get("file");
@@ -643,14 +647,14 @@ document.addEventListener("submit", async event => {
     if (kind !== "photo" && !value("title")) throw new Error("Please enter a title.");
     if (kind === "letter" && !value("body")) throw new Error("Please write a letter.");
     const item = {
-      ...current, id:id || crypto.randomUUID(), kind,
+      ...current, id:id || (cover ? "hero-" : "") + crypto.randomUUID(), kind,
       title:value("title"), date:value("date") || null, body:value("body"),
       annual:fields.has("annual"), parent_id:value("parent_id") || null
     };
     if (kind === "letter") {
       item.letter_from = cloud ? sender : value("letter_from") === "sondos" ? "sondos" : "mostafa";
-      if (!current) item.created_at = new Date().toISOString();
     }
+    if (!current && (cover || kind === "letter")) item.created_at = new Date().toISOString();
     if (cloud && !current) item.created_by = userId;
     await save(item,file);
     dialog.close();
