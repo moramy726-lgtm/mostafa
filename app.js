@@ -75,6 +75,8 @@ let loginReady = false, loginUnavailable = false, loginIdentity;
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const dates = new Intl.DateTimeFormat("en-GB", { day:"numeric", month:"long", year:"numeric" });
 const annualDates = new Intl.DateTimeFormat("en-GB", { day:"numeric", month:"long" });
+const dateBadgeMonth = new Intl.DateTimeFormat("en-GB", {month:"short"});
+const repeatsYearly = item => item.annual || item.id === "first";
 const cairo = new Intl.DateTimeFormat("en-CA", { timeZone:"Africa/Cairo", year:"numeric", month:"2-digit", day:"2-digit" });
 function dateKey(parts) {
   const values = Object.fromEntries(parts.map(({type,value}) => [type,value]));
@@ -228,7 +230,7 @@ function row(item, detail = false, manage = false) {
   const album = entryKind(item) === "album";
   const viewing = item.kind === "memory" || item.kind === "event";
   return '<article class="row"><div><h3>' + esc(item.title || "Untitled photo") + '</h3>' + (album ? '<small>Album</small>' : formatDate(item.date)) +
-    (item.annual ? ' <small>· Repeats every year</small>' : '') +
+    (repeatsYearly(item) ? ' <small>· Repeats every year</small>' : '') +
     (manage && item.kind === "letter" ? '<small>From ' + (item.letter_from === "sondos" ? 'Sondos to Mostafa' : 'Mostafa to Sondos') + '</small>' : '') +
     (detail && item.body ? '<p class="preserve">' + esc(item.body) + '</p>' : '') +
     (photoCount ? '<p><small>' + photoCount + (photoCount === 1 ? ' photo' : ' photos') + '</small></p>' : '') +
@@ -285,11 +287,15 @@ function tick() {
 function calendar() {
   const entries = [...ofKind("event"), ...ofKind("memory")].sort((a,b) => b.date.localeCompare(a.date));
   return '<div class="heading"><h2 class="landing-title">Our dates</h2></div>' +
-    (entries.length ? '<div class="list calendar-dates">' + entries.map(item =>
-      '<button type="button" class="row date-card" data-view="' + esc(item.id) + '"><span>' +
-      '<strong>' + esc(item.title) + '</strong>' + formatDate(item.date,item.annual) +
-      (item.annual ? '<small>Every year</small>' : '') + '</span><span class="plain small-button">View details</span></button>'
-    ).join("") + '</div>' : empty("Your special dates will show up here."));
+    (entries.length ? '<div class="calendar-dates">' + entries.map(item => {
+      const date = localDate(item.date);
+      return '<button type="button" class="row date-card" data-view="' + esc(item.id) + '">' +
+        '<time class="date-badge" datetime="' + esc(item.date) + '"><strong>' + date.getDate() +
+        '</strong><span>' + dateBadgeMonth.format(date) + '</span></time>' +
+        '<span class="date-card-copy"><strong>' + esc(item.title) + '</strong>' +
+        '<small>' + (repeatsYearly(item) ? 'Every year' : date.getFullYear()) +
+        '</small></span><span class="plain small-button date-details">Details</span></button>';
+    }).join("") + '</div>' : empty("Your special dates will show up here."));
 }
 function letters() {
   const entries = ofKind("letter");
@@ -454,7 +460,7 @@ function entryForm(kind, item, parentId) {
 function itemDetails(item, date = item.date) {
   const attached = ofKind("photo").filter(photo => photo.parent_id === item.id);
   const album = entryKind(item) === "album";
-  return '<div class="stack">' + (album ? "" : formatDate(date,item.annual)) + (item.annual ? '<small>Repeats every year</small>' : '') +
+  return '<div class="stack">' + (album ? "" : formatDate(date,repeatsYearly(item))) + (repeatsYearly(item) ? '<small>Repeats every year</small>' : '') +
     (item.body ? '<p class="preserve">' + esc(item.body) + '</p>' : '') + (attached.length ? photos(attached) : album ? empty("No photos in this album yet.") : '') +
     (dashboardOpen() && canEdit(item) ? '<div class="actions">' + action("attach","Add a photo",item.id,"primary") + action("edit","Edit",item.id) + '</div>' : '') + '</div>';
 }
