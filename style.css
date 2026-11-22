@@ -9,11 +9,10 @@ main{max-width:1030px;margin:auto;padding:20px 16px calc(110px + env(safe-area-i
 .list{display:grid;gap:10px}.row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:15px;background:var(--card);border:1px solid var(--line);border-radius:13px}.row>div:first-child{min-width:0;overflow-wrap:anywhere}.row p{margin-top:5px}.row .actions{flex:none}.row img{width:54px;height:54px;object-fit:cover;border-radius:8px;flex:none}.row .plain{min-width:44px}
 .primary,.plain{border:0;border-radius:10px;min-height:44px;padding:5px 12px}.primary{background:var(--wine);color:white;font-weight:bold}.plain{background:var(--rose);color:var(--wine)}.small-button{font-size:.87rem}.stack{display:grid;gap:15px}.login{max-width:425px;margin:7vh auto 0}.login h1{margin-bottom:12px}.login .primary{width:100%}.form-note{min-height:1.65em;color:var(--wine)}label{display:grid;gap:6px;font-weight:bold}label.check{display:flex;align-items:center;gap:8px}input:not([type=checkbox]),textarea{width:100%;min-height:46px;padding:9px 10px;border:1px solid #b9aaa1;border-radius:8px;background:white;color:var(--ink);font-weight:normal}textarea{min-height:125px;resize:vertical}input[type=checkbox]{width:20px;height:20px;accent-color:var(--wine)}
 nav{z-index:2;position:fixed;bottom:0;inset-inline:0;display:flex;justify-content:center;padding:6px 7px calc(6px + env(safe-area-inset-bottom));background:#fffdf9f5;border-top:1px solid var(--line);backdrop-filter:blur(14px)}nav a{flex:0 1 126px;min-width:0;display:grid;justify-items:center;align-content:center;gap:2px;min-height:52px;font-size:.88rem;color:var(--muted);border-radius:11px}nav a[aria-current]{color:var(--wine);background:var(--rose);font-weight:bold}nav svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
-.calendar{padding:12px}.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;text-align:center}.cal-grid small{font-size:.76rem}.day{min-height:43px;border:0;border-radius:8px;background:transparent;color:var(--ink);position:relative}.day.has-event::after{content:'';position:absolute;bottom:4px;left:calc(50% - 2px);width:4px;height:4px;border-radius:50%;background:currentColor}.day[aria-pressed=true]{color:white;background:var(--wine)}.day[aria-current=date]:not([aria-pressed=true]){box-shadow:inset 0 0 0 1px var(--wine)}.calendar .heading h2{font-size:1.12rem}.calendar .heading button{padding-inline:8px;font-size:.86rem}
 dialog{width:min(94%,540px);max-height:calc(100dvh - 32px);border:1px solid var(--line);border-radius:18px;padding:20px;background:var(--card);color:var(--ink)}dialog::backdrop{background:#21181ab0}.full-photo{display:block;width:100%;max-height:65dvh;object-fit:contain}#status{position:fixed;z-index:4;inset-inline:16px;bottom:calc(76px + env(safe-area-inset-bottom));margin:auto;width:fit-content;max-width:calc(100% - 32px);padding:8px 14px;border-radius:10px;background:var(--ink);color:white}#status:empty{display:none}
 select{font:inherit;width:100%;min-height:46px;padding:9px 32px 9px 10px;border:1px solid #b9aaa1;border-radius:8px;color:var(--ink);appearance:none;background:white linear-gradient(45deg,transparent 50%,var(--wine) 50%) calc(100% - 16px) 50%/6px 6px no-repeat}.hero img{object-position:50% 20%}
 .actions{justify-content:flex-end}.hero h1{letter-spacing:-.035em}a.plain{display:inline-flex;align-items:center}.row:has(.actions:empty) .actions{display:none}
-@media(min-width:700px){main{padding-inline:24px}.hero{min-height:440px;padding:38px}.grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.calendar{padding:24px}.day{min-height:50px}}
+@media(min-width:700px){main{padding-inline:24px}.hero{min-height:440px;padding:38px}.grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}}
 
 .landing-section{scroll-margin-top:20px}
 .landing-section + .landing-section{margin-top:clamp(42px,8vw,76px)}
@@ -71,7 +70,7 @@ nav{box-shadow:0 -5px 25px #40211d0b}
 nav a{transition:background-color .2s ease,color .2s ease}
 nav a[aria-current] svg{transform:translateY(-2px)}
 nav svg{transition:transform .24s ease}
-.hero-link,.plain,.primary,.letter-entry summary,.calendar .day{transition:background-color .2s ease,color .2s ease,box-shadow .2s ease}
+.hero-link,.plain,.primary,.letter-entry summary{transition:background-color .2s ease,color .2s ease,box-shadow .2s ease}
 .letter-entry[open] summary{background:#f9eeee}
 .photo,.letter-reading,.memory-copy{overflow-wrap:anywhere}
 dialog[open]{animation:card-in .25s ease both}
@@ -81,7 +80,7 @@ dialog::backdrop{animation:fade-in .24s ease both}
 .in-view,.letter-entry[open] .letter-reading{animation:card-in .38s cubic-bezier(.2,.7,.2,1) both}
 @keyframes card-in{from{opacity:.35;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @keyframes fade-in{from{opacity:0}to{opacity:1}}
-@media(hover:hover){.plain:hover,.calendar .day:not([aria-pressed=true]):hover{background:#efd6dd}.primary:hover{background:#592232}.hero-link:hover{background:#f4e1e3}.photo:hover{box-shadow:0 6px 22px #3518201b}}
+@media(hover:hover){.plain:hover{background:#efd6dd}.primary:hover{background:#592232}.hero-link:hover{background:#f4e1e3}.photo:hover{box-shadow:0 6px 22px #3518201b}}
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
 }
@@ -125,3 +124,8 @@ body{
 @media(prefers-reduced-motion:reduce){
   body{animation:none}
 }
+
+.date-card{width:100%;color:var(--ink);text-align:start}
+.date-card>span:first-child{display:grid;min-width:0;overflow-wrap:anywhere}
+.date-card>span:last-child{display:inline-flex;align-items:center;flex:none}
+.date-card:hover .plain{background:#efd6dd}

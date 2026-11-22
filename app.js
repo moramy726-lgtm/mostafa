@@ -74,7 +74,7 @@ let anchoredSection, revealObserver;
 let loginReady = false, loginUnavailable = false, loginIdentity;
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const dates = new Intl.DateTimeFormat("en-GB", { day:"numeric", month:"long", year:"numeric" });
-const months = new Intl.DateTimeFormat("en-GB", { month:"long", year:"numeric" });
+const annualDates = new Intl.DateTimeFormat("en-GB", { day:"numeric", month:"long" });
 const cairo = new Intl.DateTimeFormat("en-CA", { timeZone:"Africa/Cairo", year:"numeric", month:"2-digit", day:"2-digit" });
 function dateKey(parts) {
   const values = Object.fromEntries(parts.map(({type,value}) => [type,value]));
@@ -82,9 +82,6 @@ function dateKey(parts) {
 }
 const today = () => dateKey(cairo.formatToParts(new Date()));
 const localDate = value => new Date(value + "T12:00:00");
-const key = date => [date.getFullYear(), String(date.getMonth()+1).padStart(2,"0"), String(date.getDate()).padStart(2,"0")].join("-");
-let selected = today(), month = localDate(selected.slice(0,7) + "-01");
-
 function esc(value = "") {
   return String(value ?? "").replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[char]);
 }
@@ -104,7 +101,7 @@ const ofKind = kind => records.filter(item => entryKind(item) === kind).sort((a,
     ? (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0)
     : (b.date || "").localeCompare(a.date || "")
 );
-const formatDate = value => value ? '<time datetime="' + esc(value) + '">' + dates.format(localDate(value)) + '</time>' : "";
+const formatDate = (value, annual = false) => value ? '<time datetime="' + esc(value) + '">' + (annual ? annualDates : dates).format(localDate(value)) + '</time>' : "";
 const action = (type, name, value = "", style = "plain") => '<button type="button" class="' + style + '" data-' + type + '="' + esc(value) + '">' + esc(name) + '</button>';
 const empty = message => '<p class="empty">' + esc(message) + '</p>';
 function notify(message) {
@@ -285,29 +282,14 @@ function tick() {
     if (element) element.textContent = String(number).padStart(2,"0");
   });
 }
-function eventsOn(day) {
-  return [...ofKind("event"), ...ofKind("memory")].filter(item =>
-    item.annual ? item.date.slice(5) === day.slice(5) : item.date === day
-  );
-}
 function calendar() {
-  const year = month.getFullYear(), index = month.getMonth();
-  const cells = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(day => '<small>' + day + '</small>');
-  for (let i=0;i<month.getDay();i++) cells.push("<span></span>");
-  const length = new Date(year,index+1,0).getDate();
-  for (let number=1;number<=length;number++) {
-    const day = key(new Date(year,index,number,12));
-    const items = eventsOn(day);
-    cells.push('<button type="button" class="day' + (items.length ? ' has-event' : '') + '" data-day="' + day + '" aria-label="' +
-      dates.format(localDate(day)) + (items.length ? ', ' + items.map(item => esc(item.title)).join(", ") : '') + '" aria-pressed="' + (day === selected) + '"' +
-      (day === today() ? ' aria-current="date"' : '') + '>' + number + '</button>');
-  }
-  const items = eventsOn(selected);
-  return '<div class="heading"><h2 class="landing-title">Our dates</h2></div><section class="panel calendar"><div class="heading">' +
-    action("month","Previous","-1") + '<h2>' + months.format(month) + '</h2>' + action("month","Next","1") + '</div>' +
-    '<div class="cal-grid">' + cells.join("") + '</div></section><section class="section"><div class="heading"><h2>' +
-    dates.format(localDate(selected)) + '</h2></div>' +
-    (items.length ? action("day-details","View day details",selected) : empty("Nothing in our calendar for this day.")) + '</section>';
+  const entries = [...ofKind("event"), ...ofKind("memory")].sort((a,b) => b.date.localeCompare(a.date));
+  return '<div class="heading"><h2 class="landing-title">Our dates</h2></div>' +
+    (entries.length ? '<div class="list calendar-dates">' + entries.map(item =>
+      '<button type="button" class="row date-card" data-view="' + esc(item.id) + '"><span>' +
+      '<strong>' + esc(item.title) + '</strong>' + formatDate(item.date,item.annual) +
+      (item.annual ? '<small>Every year</small>' : '') + '</span><span class="plain small-button">View details</span></button>'
+    ).join("") + '</div>' : empty("Your special dates will show up here."));
 }
 function letters() {
   const entries = ofKind("letter");
@@ -407,7 +389,7 @@ function revealSections() {
       observer.unobserve(entry.target);
     }
   }, {threshold:.08});
-  for (const element of main.querySelectorAll(".memory-story, .photo-memory, .calendar, .letter-entry, .counter")) {
+  for (const element of main.querySelectorAll(".memory-story, .photo-memory, .date-card, .letter-entry, .counter")) {
     revealObserver.observe(element);
   }
 }
@@ -459,7 +441,7 @@ function entryForm(kind, item, parentId) {
   const linked = item?.parent_id || parentId;
   showDialog((item ? "Edit " : "Add ") + (cover ? "cover photo" : kind),'<form id="entry" class="stack" data-kind="' + kind + '" data-id="' + esc(item?.id) + '">' +
     '<label>Title' + (photo ? ' (optional)' : '') + '<input name="title" maxlength="120" value="' + esc(title) + '"' + (photo ? "" : " required") + '></label>' +
-    (!letter && !cover && !album ? '<label>Date' + (photo ? " (optional)" : "") + '<input name="date" type="date" value="' + esc(item?.date ?? (photo ? find(linked)?.date || "" : event ? selected : today())) + '"' + (photo ? "" : " required") + '></label>' : '') +
+    (!letter && !cover && !album ? '<label>Date' + (photo ? " (optional)" : "") + '<input name="date" type="date" value="' + esc(item?.date ?? (photo ? find(linked)?.date || "" : today())) + '"' + (photo ? "" : " required") + '></label>' : '') +
     (letter && !cloud ? '<label>From<select name="letter_from"><option value="mostafa">Mostafa to Sondos</option>' +
       '<option value="sondos"' + (item?.letter_from === "sondos" ? ' selected' : '') + '>Sondos to Mostafa</option></select></label>' : '') +
     (event ? '<label class="check"><input name="annual" type="checkbox"' + (item?.annual ? " checked" : "") + '> Repeat every year</label>' : '') +
@@ -472,25 +454,13 @@ function entryForm(kind, item, parentId) {
 function itemDetails(item, date = item.date) {
   const attached = ofKind("photo").filter(photo => photo.parent_id === item.id);
   const album = entryKind(item) === "album";
-  return '<div class="stack">' + (album ? "" : formatDate(date)) + (item.annual ? '<small>Repeats every year</small>' : '') +
+  return '<div class="stack">' + (album ? "" : formatDate(date,item.annual)) + (item.annual ? '<small>Repeats every year</small>' : '') +
     (item.body ? '<p class="preserve">' + esc(item.body) + '</p>' : '') + (attached.length ? photos(attached) : album ? empty("No photos in this album yet.") : '') +
     (dashboardOpen() && canEdit(item) ? '<div class="actions">' + action("attach","Add a photo",item.id,"primary") + action("edit","Edit",item.id) + '</div>' : '') + '</div>';
 }
 function viewItem(item) {
   showDialog(item.title,itemDetails(item));
 }
-function viewDay(day) {
-  const items = eventsOn(day);
-  if (!items.length) return;
-  if (items.length === 1) {
-    showDialog(items[0].title,itemDetails(items[0],day));
-    return;
-  }
-  showDialog(dates.format(localDate(day)),'<div class="stack">' + items.map(item =>
-    '<article class="panel stack"><h3>' + esc(item.title) + '</h3>' + itemDetails(item,day) + '</article>'
-  ).join("") + '</div>');
-}
-
 async function startSession() {
   if (cloud) {
     const [roleResult, senderResult, userResult] = await Promise.all([
@@ -567,19 +537,6 @@ document.addEventListener("click", async event => {
       return;
     }
     if ("close" in data && dialog.open) dialog.close();
-    if ("day" in data) {
-      selected = data.day;
-      document.getElementById("calendar").innerHTML = calendar();
-      main.querySelector('[aria-pressed="true"]')?.focus({preventScroll:true});
-      viewDay(selected);
-    }
-    if ("dayDetails" in data) viewDay(data.dayDetails);
-    if ("month" in data) {
-      month = new Date(month.getFullYear(),month.getMonth()+Number(data.month),1,12);
-      selected = key(month);
-      document.getElementById("calendar").innerHTML = calendar();
-      main.querySelector('[data-month="' + data.month + '"]')?.focus({preventScroll:true});
-    }
     if ("view" in data && find(data.view)) viewItem(find(data.view));
     if ("viewPhoto" in data && photoUrls.has(data.viewPhoto)) {
       const item = find(data.viewPhoto);
