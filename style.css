@@ -133,3 +133,4 @@ body{
 .date-card-copy{display:grid;gap:3px;min-width:0;overflow-wrap:anywhere}
 .date-details{display:inline-flex;align-items:center}
 .date-card:hover .date-details{background:#efd6dd}
+.date-countdown{color:var(--wine);font-weight:bold;font-variant-numeric:tabular-nums}

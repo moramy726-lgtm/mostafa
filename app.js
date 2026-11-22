@@ -277,12 +277,30 @@ function home() {
     ["Days","Hours","Minutes","Seconds"].map((label,index) => '<div><b id="count-' + index + '">0</b><span>' + label + '</span></div>').join("") +
     '</div></section>';
 }
+function annualCountdown(date, referenceDay = today()) {
+  const monthDay = date.slice(5);
+  const year = Number(referenceDay.slice(0,4)) + Number(monthDay < referenceDay.slice(5));
+  const next = year + "-" + monthDay;
+  const days = (Date.parse(next) - Date.parse(referenceDay)) / 86400000;
+  if (days === 0) return "Today";
+  return days === 1 ? "1 day to go" : days + " days to go";
+}
+
 function tick() {
   const seconds = Math.max(0, Math.floor((Date.now() - start)/1000));
   [Math.floor(seconds/86400),Math.floor(seconds/3600)%24,Math.floor(seconds/60)%60,seconds%60].forEach((number,index) => {
     const element = document.getElementById("count-" + index);
     if (element) element.textContent = String(number).padStart(2,"0");
   });
+  const countdowns = main.querySelectorAll("[data-countdown-date]");
+  if (countdowns.length) {
+    const referenceDay = today();
+    for (const element of countdowns) {
+      if (element.dataset.referenceDay === referenceDay) continue;
+      element.textContent = annualCountdown(element.dataset.countdownDate,referenceDay);
+      element.dataset.referenceDay = referenceDay;
+    }
+  }
 }
 function calendar() {
   const entries = [...ofKind("event"), ...ofKind("memory")].sort((a,b) => b.date.localeCompare(a.date));
@@ -294,7 +312,9 @@ function calendar() {
         '</strong><span>' + dateBadgeMonth.format(date) + '</span></time>' +
         '<span class="date-card-copy"><strong>' + esc(item.title) + '</strong>' +
         '<small>' + (repeatsYearly(item) ? 'Every year' : date.getFullYear()) +
-        '</small></span><span class="plain small-button date-details">Details</span></button>';
+        '</small>' + ((item.id === "first" || item.id === "birthday") && repeatsYearly(item)
+          ? '<small class="date-countdown" data-countdown-date="' + esc(item.date) + '">' + annualCountdown(item.date) + '</small>'
+          : '') + '</span><span class="plain small-button date-details">Details</span></button>';
     }).join("") + '</div>' : empty("Your special dates will show up here."));
 }
 function letters() {
