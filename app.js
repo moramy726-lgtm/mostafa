@@ -94,7 +94,11 @@ const canEdit = item => Boolean(item && (!cloud || (
   item.kind === "letter" ? (item.letter_from || "mostafa") === sender :
   sender === "mostafa" || item.created_by === userId
 )));
-const entryKind = item => item.kind === "photo" && item.id.startsWith("hero-") ? "cover" : item.kind;
+function entryKind(item) {
+  if (item.kind === "photo" && item.id.startsWith("hero-")) return "cover";
+  if (item.kind === "memory" && item.id.startsWith("album-")) return "album";
+  return item.kind;
+}
 const ofKind = kind => records.filter(item => entryKind(item) === kind).sort((a,b) =>
   kind === "letter" || kind === "cover"
     ? (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0)
@@ -224,15 +228,16 @@ function photos(items) {
 }
 function row(item, detail = false, manage = false) {
   const photoCount = ofKind("photo").filter(photo => photo.parent_id === item.id).length;
+  const album = entryKind(item) === "album";
   const viewing = item.kind === "memory" || item.kind === "event";
-  return '<article class="row"><div><h3>' + esc(item.title || "Untitled photo") + '</h3>' + formatDate(item.date) +
+  return '<article class="row"><div><h3>' + esc(item.title || "Untitled photo") + '</h3>' + (album ? '<small>Album</small>' : formatDate(item.date)) +
     (item.annual ? ' <small>· Repeats every year</small>' : '') +
     (manage && item.kind === "letter" ? '<small>From ' + (item.letter_from === "sondos" ? 'Sondos to Mostafa' : 'Mostafa to Sondos') + '</small>' : '') +
     (detail && item.body ? '<p class="preserve">' + esc(item.body) + '</p>' : '') +
     (photoCount ? '<p><small>' + photoCount + (photoCount === 1 ? ' photo' : ' photos') + '</small></p>' : '') +
     '</div><div class="actions">' +
     (manage && canEdit(item) ? action("edit","Edit",item.id,"plain small-button") : '') +
-    (viewing ? action("view","Open",item.id,"plain small-button") : item.kind === "photo" ? action("view-photo","Open",item.id,"plain small-button") : '') +
+    (viewing ? action("view",album ? "Open album" : "Open",item.id,"plain small-button") : item.kind === "photo" ? action("view-photo","Open",item.id,"plain small-button") : '') +
     '</div></article>';
 }
 function memoryFeed() {
@@ -243,7 +248,7 @@ function memoryFeed() {
     if (!byMemory.has(picture.parent_id)) byMemory.set(picture.parent_id, []);
     byMemory.get(picture.parent_id).push(picture);
   }
-  const stories = [...ofKind("memory"), ...ofKind("event").filter(item => byMemory.has(item.id))];
+  const stories = [...ofKind("album"), ...ofKind("memory"), ...ofKind("event").filter(item => byMemory.has(item.id))];
   const storyIds = new Set(stories.map(item => item.id));
   const entries = [...stories, ...pictures.filter(picture => !storyIds.has(picture.parent_id))]
     .sort((a,b) => (b.date || "").localeCompare(a.date || ""));
@@ -252,6 +257,7 @@ function memoryFeed() {
       if (item.kind === "photo") {
         return '<article class="photo-memory">' + photos([item]) + (item.date ? formatDate(item.date) : '') + '</article>';
       }
+      if (entryKind(item) === "album") return row(item,true);
       const attached = byMemory.get(item.id) || [];
       return '<article class="memory-story panel"><div class="memory-copy">' + formatDate(item.date) +
         '<h3>' + esc(item.title) + '</h3>' + (item.body ? '<p class="preserve">' + esc(item.body) + '</p>' : '') + '</div>' +
@@ -320,7 +326,7 @@ function letters() {
   }).join("");
 }
 function dashboard() {
-  const groups = [["cover","Cover photo"],["photo","Photos"],["memory","Memories"],["event","Special dates"],["letter","Letters"]];
+  const groups = [["cover","Cover photo"],["photo","Photos"],["album","Albums"],["memory","Memories"],["event","Special dates"],["letter","Letters"]];
   return '<div class="heading"><h1>Dashboard</h1></div>' +
     groups.map(([kind,title]) => '<section class="section"><div class="heading"><h2>' +title+ '</h2>' +
       action("new",kind === "cover" ? "Upload cover photo" : "Add " + kind,kind,"primary") + '</div>' +
@@ -447,26 +453,27 @@ function showDialog(title, content) {
 }
 function entryForm(kind, item, parentId) {
   const cover = kind === "cover", photo = kind === "photo" || cover, letter = kind === "letter";
-  const event = kind === "event";
+  const event = kind === "event", album = kind === "album";
   const title = item?.title || "";
-  const related = [...ofKind("memory"),...ofKind("event")];
+  const related = [...ofKind("album"),...ofKind("memory"),...ofKind("event")];
   const linked = item?.parent_id || parentId;
   showDialog((item ? "Edit " : "Add ") + (cover ? "cover photo" : kind),'<form id="entry" class="stack" data-kind="' + kind + '" data-id="' + esc(item?.id) + '">' +
     '<label>Title' + (photo ? ' (optional)' : '') + '<input name="title" maxlength="120" value="' + esc(title) + '"' + (photo ? "" : " required") + '></label>' +
-    (!letter && !cover ? '<label>Date' + (photo ? " (optional)" : "") + '<input name="date" type="date" value="' + esc(item?.date ?? (photo ? find(linked)?.date || "" : event ? selected : today())) + '"' + (photo ? "" : " required") + '></label>' : '') +
+    (!letter && !cover && !album ? '<label>Date' + (photo ? " (optional)" : "") + '<input name="date" type="date" value="' + esc(item?.date ?? (photo ? find(linked)?.date || "" : event ? selected : today())) + '"' + (photo ? "" : " required") + '></label>' : '') +
     (letter && !cloud ? '<label>From<select name="letter_from"><option value="mostafa">Mostafa to Sondos</option>' +
       '<option value="sondos"' + (item?.letter_from === "sondos" ? ' selected' : '') + '>Sondos to Mostafa</option></select></label>' : '') +
     (event ? '<label class="check"><input name="annual" type="checkbox"' + (item?.annual ? " checked" : "") + '> Repeat every year</label>' : '') +
-    (!photo ? '<label>' + (letter ? "Letter" : "Your story (optional)") + '<textarea name="body" maxlength="10000"' + (letter ? " required" : "") + '>' + esc(item?.body) + '</textarea></label>' : cover ? '' :
-     '<label>Attach to a memory or event<select name="parent_id"><option value="">General album</option>' + related.map(parent => '<option value="' + esc(parent.id) + '"' + (linked === parent.id ? " selected" : "") + '>' + esc(parent.title) + '</option>').join("") + '</select></label>') +
+    (!photo ? '<label>' + (letter ? "Letter" : album ? "Description (optional)" : "Your story (optional)") + '<textarea name="body" maxlength="10000"' + (letter ? " required" : "") + '>' + esc(item?.body) + '</textarea></label>' : cover ? '' :
+     '<label>Attach to an album, memory or event<select name="parent_id"><option value="">Unsorted photos</option>' + related.map(parent => '<option value="' + esc(parent.id) + '"' + (linked === parent.id ? " selected" : "") + '>' + esc(parent.title + (entryKind(parent) === "album" ? " (Album)" : "")) + '</option>').join("") + '</select></label>') +
     (photo && !item ? '<label>Photo<input type="file" name="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" required></label><small>JPEG, PNG, WebP, GIF or AVIF · up to 15 MB each.</small>' : '') +
     '<div class="actions"><button class="primary">Save</button>' + (item ? action("delete","Delete",item.id) : '') +
     '</div><p class="form-note" role="status"></p></form>');
 }
 function itemDetails(item, date = item.date) {
   const attached = ofKind("photo").filter(photo => photo.parent_id === item.id);
-  return '<div class="stack">' + formatDate(date) + (item.annual ? '<small>Repeats every year</small>' : '') +
-    (item.body ? '<p class="preserve">' + esc(item.body) + '</p>' : '') + (attached.length ? photos(attached) : '') +
+  const album = entryKind(item) === "album";
+  return '<div class="stack">' + (album ? "" : formatDate(date)) + (item.annual ? '<small>Repeats every year</small>' : '') +
+    (item.body ? '<p class="preserve">' + esc(item.body) + '</p>' : '') + (attached.length ? photos(attached) : album ? empty("No photos in this album yet.") : '') +
     (dashboardOpen() && canEdit(item) ? '<div class="actions">' + action("attach","Add a photo",item.id,"primary") + action("edit","Edit",item.id) + '</div>' : '') + '</div>';
 }
 function viewItem(item) {
@@ -637,7 +644,8 @@ document.addEventListener("submit", async event => {
     if (!dashboardOpen()) return;
     const {id} = form.dataset;
     const cover = form.dataset.kind === "cover";
-    const kind = cover ? "photo" : form.dataset.kind;
+    const album = form.dataset.kind === "album";
+    const kind = cover ? "photo" : album ? "memory" : form.dataset.kind;
     const current = find(id);
     if (id && !canEdit(current)) throw new Error("You can only change entries you’re allowed to edit.");
     const file = fields.get("file");
@@ -647,8 +655,8 @@ document.addEventListener("submit", async event => {
     if (kind !== "photo" && !value("title")) throw new Error("Please enter a title.");
     if (kind === "letter" && !value("body")) throw new Error("Please write a letter.");
     const item = {
-      ...current, id:id || (cover ? "hero-" : "") + crypto.randomUUID(), kind,
-      title:value("title"), date:value("date") || null, body:value("body"),
+      ...current, id:id || (cover ? "hero-" : album ? "album-" : "") + crypto.randomUUID(), kind,
+      title:value("title"), date:album ? current?.date || today() : value("date") || null, body:value("body"),
       annual:fields.has("annual"), parent_id:value("parent_id") || null
     };
     if (kind === "letter") {
